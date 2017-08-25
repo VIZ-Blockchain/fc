@@ -24,8 +24,8 @@ namespace fc {
    bool configure_logging( const logging_config& cfg )
    {
       try {
-      static bool reg_console_appender = appender::register_appender<console_appender>( "console" );
       static bool reg_json_console_appender = appender::register_appender<json_console_appender>( "json_console" );
+      static bool reg_console_appender = appender::register_appender<console_appender>( "console" );
       static bool reg_file_appender = appender::register_appender<file_appender>( "file" );
       get_logger_map().clear();
       get_appender_map().clear();
@@ -78,18 +78,6 @@ namespace fc {
                  ) ); 
       cfg.appenders.push_back( 
              appender_config( "stdout", "console", 
-                 mutable_variant_object()
-                     ( "stream","std_out") 
-                     ( "level_colors", c ) 
-                 ) ); 
-      cfg.appenders.push_back( 
-             appender_config( "stderr", "json_console", 
-                 mutable_variant_object()
-                     ( "stream","std_error") 
-                     ( "level_colors", c ) 
-                 ) );
-      cfg.appenders.push_back( 
-             appender_config( "stdout", "json_console", 
                  mutable_variant_object()
                      ( "stream","std_out") 
                      ( "level_colors", c ) 
