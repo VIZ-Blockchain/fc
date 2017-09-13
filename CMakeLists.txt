@@ -198,6 +198,7 @@ set( fc_sources
      src/log/logger.cpp
      src/log/appender.cpp
      src/log/console_appender.cpp
+     src/log/json_console_appender.cpp
      src/log/file_appender.cpp
      src/log/gelf_appender.cpp
      src/log/logger_config.cpp
@@ -226,10 +227,10 @@ set( fc_sources
      src/crypto/rand.cpp
      src/network/tcp_socket.cpp
      src/network/udp_socket.cpp
-     src/network/udt_socket.cpp
      src/network/http/http_connection.cpp
      src/network/http/http_server.cpp
      src/network/http/websocket.cpp
+     src/network/http/leaky_bucket.cpp
      src/network/ntp.cpp
      src/network/ip.cpp
      src/network/rate_limiting.cpp
@@ -253,7 +254,6 @@ list(APPEND sources "${CMAKE_CURRENT_BINARY_DIR}/git_revision.cpp")
 list(APPEND sources ${fc_headers})
 
 add_subdirectory( vendor/websocketpp )
-add_subdirectory( vendor/udt4 )
 add_subdirectory( vendor/equihash )
 
 setup_library( fc SOURCES ${sources} LIBRARY_TYPE STATIC DONT_INSTALL_LIBRARY )
@@ -343,27 +343,40 @@ SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DWEBSOCKETPP_STRICT_MASKING")
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBOOST_ASIO_HAS_STD_CHRONO")
 
+OPTION( LOG_LONG_API "Log long API calls over websocket (ON OR OFF)" ON )
+MESSAGE( STATUS "LOG_LONG_API: ${LOG_LONG_API}" )
+if( LOG_LONG_API )
+  SET( LOG_LONG_API_MAX_MS 1000 CACHE STRING "Max API execution time in ms" )
+  SET( LOG_LONG_API_WARN_MS 750 CACHE STRING "API execution time in ms at which to warn" )
+  MESSAGE( STATUS "     " )
+  MESSAGE( STATUS "     LOGGING LONG API CALLS" )
+  MESSAGE( STATUS "          MAX  MS: ${LOG_LONG_API_MAX_MS}" )
+  MESSAGE( STATUS "          WARN MS: ${LOG_LONG_API_WARN_MS}" )
+  MESSAGE( STATUS "     " )
+  SET( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DLOG_LONG_API -DLOG_LONG_API_MAX_MS=${LOG_LONG_API_MAX_MS} -DLOG_LONG_API_WARN_MS=${LOG_LONG_API_WARN_MS}" )
+  SET( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DLOG_LONG_API -DLOG_LONG_API_MAX_MS=${LOG_LONG_API_MAX_MS} -DLOG_LONG_API_WARN_MS=${LOG_LONG_API_WARN_MS}" )
+endif()
+
 target_include_directories(fc
   PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${Boost_INCLUDE_DIR}
     ${OPENSSL_INCLUDE_DIR}
     "vendor/diff-match-patch-cpp-stl"
+    ${CMAKE_CURRENT_SOURCE_DIR}/vendor/websocketpp
     "${readline_includes}"
 
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/vendor/boost_1.51/include
     ${CMAKE_CURRENT_SOURCE_DIR}/vendor/cyoencode-1.0.2/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/vendor/udt4/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/vendor/websocketpp
     ${CMAKE_CURRENT_SOURCE_DIR}/vendor/secp256k1-zkp
     ${CMAKE_CURRENT_SOURCE_DIR}/vendor/equihash
   )
 
-#target_link_libraries( fc PUBLIC udt ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES} ${ZLIB_LIBRARIES} ${BZIP2_LIBRARIES} ${PLATFORM_SPECIFIC_LIBS} ${RPCRT4} ${CMAKE_DL_LIBS} ${rt_library} ${ECC_LIB} )
+#target_link_libraries( fc PUBLIC ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES} ${ZLIB_LIBRARIES} ${BZIP2_LIBRARIES} ${PLATFORM_SPECIFIC_LIBS} ${RPCRT4} ${CMAKE_DL_LIBS} ${rt_library} ${ECC_LIB} )
 IF(NOT WIN32)
   set(LINK_USR_LOCAL_LIB -L/usr/local/lib)
 ENDIF()
-target_link_libraries( fc PUBLIC ${LINK_USR_LOCAL_LIB} udt equihash ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES} ${ZLIB_LIBRARIES} ${BZIP2_LIBRARIES} ${PLATFORM_SPECIFIC_LIBS} ${RPCRT4} ${CMAKE_DL_LIBS} ${rt_library} ${readline_libraries} ${ECC_LIB} )
+target_link_libraries( fc PUBLIC ${LINK_USR_LOCAL_LIB} equihash ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES} ${ZLIB_LIBRARIES} ${BZIP2_LIBRARIES} ${PLATFORM_SPECIFIC_LIBS} ${RPCRT4} ${CMAKE_DL_LIBS} ${rt_library} ${readline_libraries} ${ECC_LIB} )
 
 if(MSVC)
   set_source_files_properties( src/network/http/websocket.cpp PROPERTIES COMPILE_FLAGS "/bigobj" )
