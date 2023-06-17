@@ -71,7 +71,7 @@ else(MSVC)
         externalproject_add(project_secp256k1
                             PREFIX ${CMAKE_CURRENT_BINARY_DIR}/vendor/secp256k1-zkp
                             SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendor/secp256k1-zkp
-                            CONFIGURE_COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/vendor/secp256k1-zkp/configure --prefix=${CMAKE_CURRENT_BINARY_DIR}/vendor/secp256k1-zkp --with-bignum=no --host=x86_64-w64-mingw32
+                            CONFIGURE_COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/vendor/secp256k1-zkp/configure --prefix=${CMAKE_CURRENT_BINARY_DIR}/vendor/secp256k1-zkp --with-bignum=no --enable-tests=no --enable-benchmark=no --enable-module-recovery --enable-experimental --enable-module-generator --enable-module-rangeproof --host=x86_64-w64-mingw32
                             BUILD_COMMAND make
                             INSTALL_COMMAND true
                             BUILD_BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/vendor/secp256k1-zkp/src/project_secp256k1-build/.libs/libsecp256k1.a
@@ -80,7 +80,7 @@ else(MSVC)
         externalproject_add(project_secp256k1
                             PREFIX ${CMAKE_CURRENT_BINARY_DIR}/vendor/secp256k1-zkp
                             SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendor/secp256k1-zkp
-                            CONFIGURE_COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/vendor/secp256k1-zkp/configure --prefix=${CMAKE_CURRENT_BINARY_DIR}/vendor/secp256k1-zkp --with-bignum=no
+                            CONFIGURE_COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/vendor/secp256k1-zkp/configure --prefix=${CMAKE_CURRENT_BINARY_DIR}/vendor/secp256k1-zkp --with-bignum=no --enable-tests=no --enable-benchmark=no --enable-module-recovery --enable-experimental --enable-module-generator --enable-module-rangeproof
                             BUILD_COMMAND make
                             INSTALL_COMMAND true
                             BUILD_BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/vendor/secp256k1-zkp/src/project_secp256k1-build/.libs/libsecp256k1.a
@@ -156,6 +156,7 @@ option(UNITY_BUILD OFF)
 
 set(fc_sources
     src/uint128_t.cpp
+    src/uint128lh_t.cpp
     src/real128.cpp
     src/variant.cpp
     src/exception.cpp
@@ -171,6 +172,7 @@ set(fc_sources
     src/asio.cpp
     src/string.cpp
     src/shared_ptr.cpp
+    src/stacktrace.cpp
     src/time.cpp
     src/utf8.cpp
     src/io/iostream.cpp
@@ -182,7 +184,6 @@ set(fc_sources
     src/io/varint.cpp
     src/io/console.cpp
     src/filesystem.cpp
-    src/interprocess/process.cpp
     src/interprocess/signals.cpp
     src/interprocess/file_mapping.cpp
     src/interprocess/mmap_struct.cpp
@@ -217,7 +218,6 @@ set(fc_sources
     src/crypto/sha256.cpp
     src/crypto/sha224.cpp
     src/crypto/sha512.cpp
-    src/crypto/dh.cpp
     src/crypto/blowfish.cpp
     src/crypto/elliptic_common.cpp
     src/crypto/equihash.cpp
@@ -365,7 +365,6 @@ target_include_directories(fc
                            "${readline_includes}"
 
                            PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
-                           ${CMAKE_CURRENT_SOURCE_DIR}/vendor/boost_1.51/include
                            ${CMAKE_CURRENT_SOURCE_DIR}/vendor/cyoencode-1.0.2/src
                            ${CMAKE_CURRENT_SOURCE_DIR}/vendor/secp256k1-zkp
                            ${CMAKE_CURRENT_SOURCE_DIR}/vendor/equihash
@@ -375,7 +374,7 @@ target_include_directories(fc
 if(NOT WIN32)
     set(LINK_USR_LOCAL_LIB -L/usr/local/lib)
 endif()
-target_link_libraries(fc PUBLIC ${LINK_USR_LOCAL_LIB} equihash ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES} ${ZLIB_LIBRARIES} ${BZIP2_LIBRARIES} ${PLATFORM_SPECIFIC_LIBS} ${RPCRT4} ${CMAKE_DL_LIBS} ${rt_library} ${readline_libraries} ${ECC_LIB})
+target_link_libraries(fc PUBLIC ${LINK_USR_LOCAL_LIB} equihash ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES} ${ZLIB_LIBRARIES} ${BZIP2_LIBRARIES} ${PLATFORM_SPECIFIC_LIBS} ${RPCRT4} ${CMAKE_DL_LIBS} ${rt_library} ${readline_libraries} ${ECC_LIB} ${pthread_library})
 
 if(MSVC)
     set_source_files_properties(src/network/http/websocket.cpp PROPERTIES COMPILE_FLAGS "/bigobj")
