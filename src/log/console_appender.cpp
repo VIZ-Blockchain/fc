@@ -54,6 +54,13 @@ namespace fc {
          else if (my->cfg.stream = stream::std_out)
            my->console_handle = GetStdHandle(STD_OUTPUT_HANDLE);
 
+         // Render log output as UTF-8 so non-ASCII text (e.g. Cyrillic in
+         // localized OS error messages, already converted to UTF-8 upstream)
+         // displays correctly instead of mojibake ("╨Я╤А…") in the default
+         // OEM codepage (CP866/CP437). Process-global; setting it once here is
+         // enough for all subsequent console writes.
+         SetConsoleOutputCP(CP_UTF8);
+
          // Enable ANSI escape sequence processing so inline color codes
          // (e.g. "\033[92m") embedded in log messages render as colors instead
          // of leaking as literal "←[92m" text. Supported on Windows 10 (1511+);
