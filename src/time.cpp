@@ -7,13 +7,38 @@
 #include <fc/io/sstream.hpp>
 #include <fc/exception/exception.hpp>
 
+#ifdef _WIN32
+# ifndef WIN32_LEAN_AND_MEAN
+#  define WIN32_LEAN_AND_MEAN
+# endif
+# ifndef NOMINMAX
+#  define NOMINMAX
+# endif
+# include <windows.h>
+# include <cstdint>
+#endif
+
 namespace fc {
 
     namespace bch = boost::chrono;
 
     time_point time_point::now() {
+#ifdef _WIN32
+        // boost::chrono::system_clock на Windows использует GetSystemTimeAsFileTime,
+        // которая обновляется лишь по тику системного таймера (~15.6 мс по умолчанию).
+        // Это вносит десятки мс джиттера в замеры NTP offset/round-trip. Precise-вариант
+        // (Win8+/Server 2012+) даёт суб-микросекундное разрешение настенных часов, как
+        // clock_gettime(CLOCK_REALTIME) на Linux.
+        FILETIME ft;
+        GetSystemTimePreciseAsFileTime(&ft);
+        uint64_t ticks100ns = ((uint64_t)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+        // Эпоха FILETIME — 1601-01-01; смещаем к Unix-эпохе (1970-01-01).
+        static const uint64_t epoch_diff_100ns = 116444736000000000ULL;
+        return time_point(microseconds((int64_t)((ticks100ns - epoch_diff_100ns) / 10)));
+#else
         return time_point(microseconds(
                 bch::duration_cast<bch::microseconds>(bch::system_clock::now().time_since_epoch()).count()));
+#endif
     }
 
     std::string time_point_sec::to_non_delimited_iso_string() const {
