@@ -143,6 +143,15 @@ endif()
 
 find_package(OpenSSL REQUIRED)
 
+# Some distros ship a static libcrypto built with the ZSTD compression BIO, which then
+# pulls in libzstd at link time (undefined ZSTD_* references otherwise). Append it AFTER
+# crypto so the static-link order resolves. Harmless when libcrypto needs no zstd.
+find_library(ZSTD_LIBRARY NAMES zstd)
+if(ZSTD_LIBRARY)
+    message(STATUS "Linking libzstd for OpenSSL static crypto: ${ZSTD_LIBRARY}")
+    list(APPEND OPENSSL_LIBRARIES ${ZSTD_LIBRARY})
+endif()
+
 set(CMAKE_FIND_LIBRARY_SUFFIXES ${ORIGINAL_LIB_SUFFIXES})
 
 option(UNITY_BUILD OFF)
