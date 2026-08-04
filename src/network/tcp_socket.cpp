@@ -118,7 +118,7 @@ namespace fc {
     fc::ip::endpoint tcp_socket::remote_endpoint() const {
         try {
             auto rep = my->_sock.remote_endpoint();
-            return fc::ip::endpoint(rep.address().to_v4().to_ulong(), rep.port());
+            return fc::ip::endpoint(rep.address().to_v4().to_uint(), rep.port());
         } FC_RETHROW_EXCEPTIONS(warn, "error getting socket's remote endpoint");
     }
 
@@ -126,7 +126,7 @@ namespace fc {
     fc::ip::endpoint tcp_socket::local_endpoint() const {
         try {
             auto boost_local_endpoint = my->_sock.local_endpoint();
-            return fc::ip::endpoint(boost_local_endpoint.address().to_v4().to_ulong(), boost_local_endpoint.port());
+            return fc::ip::endpoint(boost_local_endpoint.address().to_v4().to_uint(), boost_local_endpoint.port());
         } FC_RETHROW_EXCEPTIONS(warn, "error getting socket's local endpoint");
     }
 
@@ -298,14 +298,14 @@ namespace fc {
         }
         try {
             my->_accept.bind(boost::asio::ip::tcp::endpoint(
-                    boost::asio::ip::address_v4::from_string((std::string) ep.get_address()), ep.port()));
+                    boost::asio::ip::make_address_v4((std::string) ep.get_address()), ep.port()));
             my->_accept.listen();
         } FC_RETHROW_EXCEPTIONS(warn, "error listening on socket");
     }
 
     fc::ip::endpoint tcp_server::get_local_endpoint() const {
         FC_ASSERT(my != nullptr);
-        return fc::ip::endpoint(my->_accept.local_endpoint().address().to_v4().to_ulong(),
+        return fc::ip::endpoint(my->_accept.local_endpoint().address().to_v4().to_uint(),
                                 my->_accept.local_endpoint().port());
     }
 

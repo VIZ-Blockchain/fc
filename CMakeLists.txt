@@ -35,7 +35,16 @@ endif()
 set(ORIGINAL_LIB_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
 
 set(BOOST_COMPONENTS)
-list(APPEND BOOST_COMPONENTS thread date_time system filesystem program_options serialization chrono unit_test_framework context locale iostreams)
+list(APPEND BOOST_COMPONENTS thread date_time filesystem program_options serialization chrono unit_test_framework context locale iostreams)
+# Boost.System has been header-only since 1.69. Boost 1.90 stopped shipping a
+# compiled library for it, and with it the boost_system CMake config, so naming
+# system in COMPONENTS hard-fails there -- while Boost 1.83 still ships and
+# wants it. Probe for the component instead of assuming either way.
+find_package(boost_system QUIET CONFIG)
+if(boost_system_FOUND)
+    list(APPEND BOOST_COMPONENTS system)
+endif()
+
 set(Boost_USE_STATIC_LIBS ON CACHE STRING "ON or OFF")
 
 if(ECC_IMPL STREQUAL openssl)
@@ -107,10 +116,10 @@ if(WIN32)
     set(Boost_USE_MULTITHREADED ON)
     set(BOOST_ALL_DYN_LINK OFF) # force dynamic linking for all libraries
 
-    find_package(Boost 1.71 REQUIRED COMPONENTS ${BOOST_COMPONENTS})
+    find_package(Boost 1.71 CONFIG REQUIRED COMPONENTS ${BOOST_COMPONENTS})
     # coroutine is always available in Boost >= 1.71
     set(BOOST_LIBRARIES_TEMP ${Boost_LIBRARIES})
-    find_package(Boost 1.71 REQUIRED COMPONENTS coroutine)
+    find_package(Boost 1.71 CONFIG REQUIRED COMPONENTS coroutine)
     list(APPEND BOOST_COMPONENTS coroutine)
     set(Boost_LIBRARIES ${BOOST_LIBRARIES_TEMP} ${Boost_LIBRARIES})
 
@@ -122,7 +131,7 @@ else(WIN32)
 
     list(APPEND BOOST_COMPONENTS coroutine)
 
-    find_package(Boost 1.71 REQUIRED COMPONENTS ${BOOST_COMPONENTS})
+    find_package(Boost 1.71 CONFIG REQUIRED COMPONENTS ${BOOST_COMPONENTS})
 
     set(CMAKE_FIND_LIBRARY_SUFFIXES ".a;.so")
 

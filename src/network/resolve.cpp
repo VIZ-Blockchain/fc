@@ -13,7 +13,7 @@ namespace fc
     {
       if( itr->address().is_v4() )
       {
-       eps.push_back( fc::ip::endpoint(itr->address().to_v4().to_ulong(), itr->port()) );
+       eps.push_back( fc::ip::endpoint(itr->address().to_v4().to_uint(), itr->port()) );
       }
       // TODO: add support for v6 
     }

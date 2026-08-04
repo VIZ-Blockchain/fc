@@ -13,7 +13,7 @@ namespace fc {
 
         address::address(const std::string &s) {
             try {
-                _ip = boost::asio::ip::address_v4::from_string(s.c_str()).to_ulong();
+                _ip = boost::asio::ip::make_address_v4(s.c_str()).to_uint();
             } FC_RETHROW_EXCEPTIONS(error, "Error parsing IP address ${address}", ("address", s))
         }
 
@@ -31,7 +31,7 @@ namespace fc {
 
         address &address::operator=(const std::string &s) {
             try {
-                _ip = boost::asio::ip::address_v4::from_string(s.c_str()).to_ulong();
+                _ip = boost::asio::ip::make_address_v4(s.c_str()).to_uint();
             } FC_RETHROW_EXCEPTIONS(error, "Error parsing IP address ${address}", ("address", s))
             return *this;
         }
@@ -78,7 +78,7 @@ namespace fc {
             try {
                 endpoint ep;
                 auto pos = endpoint_string.find(':');
-                ep._ip = boost::asio::ip::address_v4::from_string(endpoint_string.substr(0, pos)).to_ulong();
+                ep._ip = boost::asio::ip::make_address_v4(endpoint_string.substr(0, pos)).to_uint();
                 ep._port = boost::lexical_cast<uint16_t>(endpoint_string.substr(pos + 1, endpoint_string.size()));
                 return ep;
             } FC_RETHROW_EXCEPTIONS(warn, "error converting std::string to IP endpoint")

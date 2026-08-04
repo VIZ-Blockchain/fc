@@ -20,7 +20,7 @@ namespace fc {
     return boost::asio::ip::udp::endpoint(boost::asio::ip::address_v4(e.get_address()), e.port() );
   }
   fc::ip::endpoint to_fc_ep( const boost::asio::ip::udp::endpoint& e ) {
-    return fc::ip::endpoint( e.address().to_v4().to_ulong(), e.port() );
+    return fc::ip::endpoint( e.address().to_v4().to_uint(), e.port() );
   }
 
   udp_socket::udp_socket()
