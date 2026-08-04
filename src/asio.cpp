@@ -107,16 +107,15 @@ namespace fc {
             p->set_value(ec);
         }
 
-        template<typename EndpointType, typename IteratorType>
+        template<typename EndpointType, typename ResultsType>
         void resolve_handler(
                              const typename promise<std::vector<EndpointType> >::ptr& p,
                              const boost::system::error_code& ec,
-                             IteratorType itr) {
+                             const ResultsType& results) {
             if( !ec ) {
                 std::vector<EndpointType> eps;
-                while( itr != IteratorType() ) {
-                    eps.push_back(*itr);
-                    ++itr;
+                for( const auto& entry : results ) {
+                    eps.push_back( entry.endpoint() );
                 }
                 p->set_value( eps );
             } else {
@@ -132,14 +131,15 @@ namespace fc {
 
     struct default_io_service_scope
     {
-       boost::asio::io_service*          io;
+       boost::asio::io_context*          io;
        std::vector<boost::thread*>       asio_threads;
-       boost::asio::io_service::work*    the_work;
+       boost::asio::executor_work_guard<boost::asio::io_context::executor_type>* the_work;
 
        default_io_service_scope()
        {
-            io           = new boost::asio::io_service();
-            the_work     = new boost::asio::io_service::work(*io);
+            io           = new boost::asio::io_context();
+            the_work     = new boost::asio::executor_work_guard<boost::asio::io_context::executor_type>(
+                                 boost::asio::make_work_guard(*io) );
             for( int i = 0; i < 8; ++i ) {
                asio_threads.push_back( new boost::thread( [=]()
                {
@@ -185,7 +185,7 @@ namespace fc {
     };
 
     /// If cleanup is true, do not use the return value; it is a null reference
-    boost::asio::io_service& default_io_service(bool cleanup) {
+    boost::asio::io_context& default_io_service(bool cleanup) {
         static default_io_service_scope fc_asio_service[1];
         if (cleanup) {
            for( int i = 0; i < 1; ++i )
@@ -201,8 +201,8 @@ namespace fc {
         {
           resolver res( fc::asio::default_io_service() );
           promise<std::vector<boost::asio::ip::tcp::endpoint> >::ptr p( new promise<std::vector<boost::asio::ip::tcp::endpoint> >("tcp::resolve completion") );
-          res.async_resolve( boost::asio::ip::tcp::resolver::query(hostname,port),
-                            boost::bind( detail::resolve_handler<boost::asio::ip::tcp::endpoint,resolver_iterator>, p, _1, _2 ) );
+          res.async_resolve( hostname, port,
+                            boost::bind( detail::resolve_handler<boost::asio::ip::tcp::endpoint,resolver_results>, p, _1, _2 ) );
           return p->wait();;
         }
         FC_RETHROW_EXCEPTIONS(warn, "")
@@ -215,8 +215,8 @@ namespace fc {
         {
           resolver res( fc::asio::default_io_service() );
           promise<std::vector<endpoint> >::ptr p( new promise<std::vector<endpoint> >("udp::resolve completion") );
-          res.async_resolve( resolver::query(hostname,port),
-                              boost::bind( detail::resolve_handler<endpoint,resolver_iterator>, p, _1, _2 ) );
+          res.async_resolve( hostname, port,
+                              boost::bind( detail::resolve_handler<endpoint,resolver_results>, p, _1, _2 ) );
           return p->wait();
         }
         FC_RETHROW_EXCEPTIONS(warn, "")

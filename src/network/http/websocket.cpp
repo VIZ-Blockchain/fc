@@ -1,3 +1,4 @@
+#include <fc/compat/asio_compat.hpp>
 #include <fc/network/http/websocket.hpp>
 #include <websocketpp/config/asio_client.hpp>
 #include <websocketpp/config/asio.hpp>

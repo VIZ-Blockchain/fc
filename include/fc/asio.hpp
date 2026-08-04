@@ -80,7 +80,7 @@ namespace fc {
          * This IO service is automatically running in its own thread to service asynchronous
          * requests without blocking any other threads.
          */
-        boost::asio::io_service &default_io_service(bool cleanup = false);
+        boost::asio::io_context &default_io_service(bool cleanup = false);
 
         /**
          *  @brief wraps boost::asio::async_read
@@ -221,7 +221,7 @@ namespace fc {
 
         namespace tcp {
             typedef boost::asio::ip::tcp::endpoint endpoint;
-            typedef boost::asio::ip::tcp::resolver::iterator resolver_iterator;
+            typedef boost::asio::ip::tcp::resolver::results_type resolver_results;
             typedef boost::asio::ip::tcp::resolver resolver;
 
             std::vector<endpoint> resolve(const std::string &hostname, const std::string &port);
@@ -254,7 +254,7 @@ namespace fc {
         }
         namespace udp {
             typedef boost::asio::ip::udp::endpoint endpoint;
-            typedef boost::asio::ip::udp::resolver::iterator resolver_iterator;
+            typedef boost::asio::ip::udp::resolver::results_type resolver_results;
             typedef boost::asio::ip::udp::resolver resolver;
 
             /// @brief resolve all udp::endpoints for hostname:port
