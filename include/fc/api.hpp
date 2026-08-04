@@ -4,13 +4,12 @@
 #include <functional>
 #include <boost/config.hpp>
 
-// ms visual c++ (as of 2013) doesn't accept the standard syntax for calling a
-// templated member function (foo->template bar();)
-#ifdef _MSC_VER
-# define FC_CALL_MEMBER_TEMPLATE_KEYWORD
-#else
-# define FC_CALL_MEMBER_TEMPLATE_KEYWORD template
-#endif
+// The `template` disambiguator must be followed by a template argument list.
+// visit_other's argument is deduced, so no list follows and the keyword is not
+// needed here at all -- clang 21 rejects it outright
+// (-Wmissing-template-arg-list-after-template-kw). Kept as an empty macro so
+// the call site below still reads as a member-template call.
+#define FC_CALL_MEMBER_TEMPLATE_KEYWORD
 
 namespace fc {
     struct identity_member {
