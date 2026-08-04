@@ -582,7 +582,10 @@ namespace fc {
                     else
                         ctx->load_verify_file(ca_filename);
                     ctx->set_verify_depth(10);
-                    ctx->set_verify_callback(boost::asio::ssl::rfc2818_verification(get_host()));
+                    // rfc2818_verification was removed in Boost 1.87; its
+                    // replacement, host_name_verification, exists since 1.73
+                    // and so needs no version gate at our 1.83 floor.
+                    ctx->set_verify_callback(boost::asio::ssl::host_name_verification(get_host()));
                 }
 
                 bool _shutting_down = false;
