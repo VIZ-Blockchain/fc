@@ -339,6 +339,9 @@ namespace fc
       } //end read_loop()
     }; //ntp_impl
 
+    // C++14 ODR-use in the rejection diagnostic needs an out-of-line definition.
+    constexpr uint32_t ntp_impl::_step_accept_threshold;
+
   } // namespace detail
 
 

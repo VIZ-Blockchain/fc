@@ -87,7 +87,7 @@ else()
     externalproject_add(project_secp256k1
                         PREFIX ${CMAKE_CURRENT_BINARY_DIR}/vendor/secp256k1-zkp
                         SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendor/secp256k1-zkp
-                        CONFIGURE_COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/vendor/secp256k1-zkp/configure --prefix=${CMAKE_CURRENT_BINARY_DIR}/vendor/secp256k1-zkp --with-bignum=no --enable-tests=no --enable-benchmark=no --enable-module-recovery --enable-experimental --enable-module-generator --enable-module-rangeproof
+                        CONFIGURE_COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/vendor/secp256k1-zkp/configure --prefix=${CMAKE_CURRENT_BINARY_DIR}/vendor/secp256k1-zkp --with-bignum=no --enable-tests=no --enable-benchmark=no --enable-module-recovery --enable-experimental --enable-module-generator --enable-module-rangeproof --disable-shared --enable-static
                         BUILD_COMMAND make
                         INSTALL_COMMAND true
                         BUILD_BYPRODUCTS ${_secp256k1_lib_dir}/.libs/libsecp256k1.a
