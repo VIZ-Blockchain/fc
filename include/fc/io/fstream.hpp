@@ -20,6 +20,7 @@ namespace fc {
         ~ofstream();
 
         void open(const fc::path &file, int m = binary);
+        bool is_open() const;
 
         size_t writesome(const char *buf, size_t len);
 

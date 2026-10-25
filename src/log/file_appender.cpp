@@ -32,6 +32,8 @@ namespace fc {
          std::thread                _timer_thread;
          std::atomic<bool>          _stop_timer{ false };
          time_point_sec             _current_file_start_time;
+         fc::path                   _current_log_filename;   // файл, который сейчас открыт на запись
+         bool                       _rotation_failed = false; // чтобы ошибка ротации не спамила каждую секунду
 
          time_point_sec get_file_start_time( const time_point_sec& timestamp, const microseconds& interval )
          {
@@ -61,7 +63,17 @@ namespace fc {
           * таймер: у file_appender::file_appender() каталог создаётся ПОСЛЕ конструктора impl. */
          void start()
          {
-            rotate_files( true );
+            /* Если стартовая ротация не удалась (каталог/путь недоступны), поток всё равно
+             * поднимаем: таймер повторит попытку и восстановится, а не «замолчит навсегда». */
+            try { rotate_files( true ); }
+            catch( const fc::exception& e )
+            {
+                std::cerr << "file_appender: initial rotation failed: " << e.to_string() << "\n";
+            }
+            catch( const std::exception& e )
+            {
+                std::cerr << "file_appender: initial rotation failed: " << e.what() << "\n";
+            }
             _timer_thread = std::thread( [this]() { timer_loop(); } );
          }
 
@@ -86,12 +98,30 @@ namespace fc {
                    out.close();
                }
                remove_all(link_filename);  // on windows, you can't delete the link while the underlying file is opened for writing
-               if( fc::exists( log_filename ) )
-                  out.open( log_filename, std::ios_base::out | std::ios_base::app );
-               else
-                  out.open( log_filename, std::ios_base::out | std::ios_base::app);
+               /* Открытие может НЕ удаться (диск полон, каталог отобран, путь занят каталогом).
+                * Раньше это проходило молча и аппендер замолкал до перезапуска, — поэтому при сбое
+                * возвращаем на запись ПРЕЖНИЙ файл и сообщаем наверх через исключение. */
+               try
+               {
+                   out.open( log_filename, std::ios_base::out | std::ios_base::app );
+                   FC_ASSERT( out.is_open(), "cannot open log file ${f}", ("f", log_filename.preferred_string()) );
+               }
+               catch( ... )
+               {
+                   /* Возвращаем аппендер к жизни: пишем в ПРЕЖНИЙ файл и восстанавливаем на него
+                    * ссылку — иначе `tail -f node.log` останется висеть на удалённом inode. */
+                   if( !initializing && _current_file_start_time.sec_since_epoch() > 0 )
+                   {
+                       try { out.open( _current_log_filename, std::ios_base::out | std::ios_base::app ); }
+                       catch( ... ) {}
+                       try { create_hard_link( _current_log_filename, link_filename ); }
+                       catch( ... ) {}
+                   }
+                   throw;
+               }
 
                create_hard_link(log_filename, link_filename);
+               _current_log_filename = log_filename;
                _current_file_start_time = start_time;
              }
 
@@ -151,12 +181,32 @@ namespace fc {
                      if( wait_us <= 0 )
                      {
                          rotate_files();
+                         if( _rotation_failed )
+                         {
+                             _rotation_failed = false;
+                             std::cerr << "file_appender: rotation recovered\n";
+                         }
                          continue;
+                     }
+                 }
+                 catch( const fc::exception& e )
+                 {
+                     wait_us = 1000000;
+                     if( !_rotation_failed )
+                     {
+                         _rotation_failed = true;
+                         std::cerr << "file_appender: rotation failed: " << e.to_string()
+                                   << " — повтор через 1 с" << "\n";
                      }
                  }
                  catch( ... )
                  {
                      wait_us = 1000000;
+                     if( !_rotation_failed )
+                     {
+                         _rotation_failed = true;
+                         std::cerr << "file_appender: rotation failed (unknown error) — повтор через 1 с\n";
+                     }
                  }
                  std::this_thread::sleep_for( std::chrono::microseconds( wait_us < 1000000 ? wait_us : 1000000 ) );
              }
@@ -178,7 +228,10 @@ namespace fc {
          fc::create_directories(my->cfg.filename.parent_path());
 
          if(!my->cfg.rotate)
+         {
             my->out.open( my->cfg.filename, std::ios_base::out | std::ios_base::app);
+            FC_ASSERT( my->out.is_open(), "cannot open log file ${f}", ("f", my->cfg.filename.preferred_string()) );
+         }
          else
             my->start();
 

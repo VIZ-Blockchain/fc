@@ -28,8 +28,19 @@ namespace fc {
    ofstream::~ofstream(){}
 
    void ofstream::open( const fc::path& file, int m ) {
-     const boost::filesystem::path& bfp = file; 
-     my->ofs.open( bfp, std::ios::binary );
+     const boost::filesystem::path& bfp = file;
+     /* Режим передаём КАК ЕСТЬ: раньше он игнорировался (всегда std::ios::binary, а для
+      * ofstream это «out» без «app») — поэтому повторное открытие существующего файла
+      * ОБРЕЗАЛО его, даже когда вызывающий просил app. Жертва — file_appender: ротация при
+      * рестарте в том же часу стирала уже записанные строки этого часа. */
+     my->ofs.open( bfp, (std::ios_base::openmode)m );
+   }
+
+   /* Отдельный геттер, а не исключение в open(): на fc::ofstream пишут и другие места
+    * (json/снапшоты/кошелёк), и менять им поведение при сбое открытия — не наше дело.
+    * Тот, для кого молчание смерти подобно (логгер), проверяет это сам. */
+   bool ofstream::is_open() const {
+     return my->ofs.is_open();
    }
    size_t ofstream::writesome( const char* buf, size_t len ) {
         my->ofs.write(buf,len);
