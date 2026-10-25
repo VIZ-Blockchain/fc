@@ -6,10 +6,13 @@
 #include <fc/thread/thread.hpp>
 #include <fc/variant.hpp>
 #include <boost/thread/mutex.hpp>
+#include <atomic>
+#include <chrono>
 #include <iomanip>
 #include <queue>
 #include <sstream>
 #include <iostream>
+#include <thread>
 
 namespace fc {
 
@@ -21,7 +24,13 @@ namespace fc {
          boost::mutex               slock;
 
       private:
-         future<void>               _rotation_task;
+         /* Ротация обслуживается СВОИМ потоком (vizd, Q#3072=A). Раньше цепочка жила в очереди
+          * файберов fc::thread::current(), а vizd создаёт аппендер на главном потоке и уходит в
+          * io_context::run() — очередь никто не крутит, и после стартовой ротации следующая задача
+          * лежала вечно (замер: knowledge/log-rotation-never-fires.md). std::thread не зависит от
+          * того, кто и как обслуживает fc-очереди. */
+         std::thread                _timer_thread;
+         std::atomic<bool>          _stop_timer{ false };
          time_point_sec             _current_file_start_time;
 
          time_point_sec get_file_start_time( const time_point_sec& timestamp, const microseconds& interval )
@@ -38,23 +47,22 @@ namespace fc {
              {
                  FC_ASSERT( cfg.rotation_interval >= seconds( 1 ) );
                  FC_ASSERT( cfg.rotation_limit >= cfg.rotation_interval );
-
-
-
-
-                 _rotation_task = async( [this]() { rotate_files( true ); }, "rotate_files(1)" );
              }
          }
 
          ~impl()
          {
-            try
-            {
-              _rotation_task.cancel_and_wait("file_appender is destructing");
-            }
-            catch( ... )
-            {
-            }
+            _stop_timer.store( true );
+            if( _timer_thread.joinable() )
+                _timer_thread.join();
+         }
+
+         /* Стартовая ротация — синхронно, чтобы первый же лог шёл в часовой файл, и только потом
+          * таймер: у file_appender::file_appender() каталог создаётся ПОСЛЕ конструктора impl. */
+         void start()
+         {
+            rotate_files( true );
+            _timer_thread = std::thread( [this]() { timer_loop(); } );
          }
 
          void rotate_files( bool initializing = false )
@@ -72,12 +80,7 @@ namespace fc {
                if( !initializing )
                {
                    if( start_time <= _current_file_start_time )
-                   {
-                       _rotation_task = schedule( [this]() { rotate_files(); },
-                                                  _current_file_start_time + cfg.rotation_interval.to_seconds(),
-                                                  "rotate_files(2)" );
-                       return;
-                   }
+                       return;   // ещё тот же час: таймер разбудит на следующей границе
 
                    out.flush();
                    out.close();
@@ -89,6 +92,7 @@ namespace fc {
                   out.open( log_filename, std::ios_base::out | std::ios_base::app);
 
                create_hard_link(log_filename, link_filename);
+               _current_file_start_time = start_time;
              }
 
              /* Delete old log files */
@@ -124,10 +128,38 @@ namespace fc {
                  }
              }
 
-             _current_file_start_time = start_time;
-             _rotation_task = schedule( [this]() { rotate_files(); },
-                                        _current_file_start_time + cfg.rotation_interval.to_seconds(),
-                                        "rotate_files(3)" );
+         }
+
+         /* Ждём до ближайшей границы часового файла и ротируем. Спим не дольше секунды, чтобы
+          * остановка не ждала весь интервал, а перевод часов вперёд подхватывался сразу.
+          * Исключение здесь не повод убивать процесс (std::thread → std::terminate) и не повод
+          * крутиться в горячем цикле: ждём секунду и пробуем снова, как раньше молчал future. */
+         void timer_loop()
+         {
+             while( !_stop_timer.load() )
+             {
+                 int64_t wait_us = 1000000;
+                 try
+                 {
+                     fc::time_point_sec next;
+                     {
+                         fc::scoped_lock<boost::mutex> lock( slock );
+                         next = _current_file_start_time + (uint32_t)cfg.rotation_interval.to_seconds();
+                     }
+                     fc::time_point now = time_point::now();
+                     wait_us = (int64_t)next.sec_since_epoch() * 1000000 - now.time_since_epoch().count();
+                     if( wait_us <= 0 )
+                     {
+                         rotate_files();
+                         continue;
+                     }
+                 }
+                 catch( ... )
+                 {
+                     wait_us = 1000000;
+                 }
+                 std::this_thread::sleep_for( std::chrono::microseconds( wait_us < 1000000 ? wait_us : 1000000 ) );
+             }
          }
    };
 
@@ -147,6 +179,8 @@ namespace fc {
 
          if(!my->cfg.rotate)
             my->out.open( my->cfg.filename, std::ios_base::out | std::ios_base::app);
+         else
+            my->start();
 
       }
       catch( ... )
