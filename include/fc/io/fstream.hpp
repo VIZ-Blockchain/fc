@@ -9,8 +9,17 @@ namespace fc {
 
     class ofstream : virtual public ostream {
     public:
+        /* Режим — СОБСТВЕННЫЙ enum fc, а НЕ std::ios_base. Значения совпадают СЛУЧАЙНО
+         * (std::ios_base::app == 1 == fc::ofstream::binary), поэтому передавать их в
+         * std::ofstream::open как есть нельзя: binary (1) стал бы app, и запись всех, кто
+         * открывает файл «заново», молча перешла бы с обрезки на дозапись (json, кошелёк,
+         * снапшоты). Перевод режима живёт в src/io/fstream.cpp::open.
+         *   out    (0) — создать/обрезать (историческое поведение по умолчанию);
+         *   binary (1) — двоичный режим; вместе с out тоже обрезает;
+         *   append (2) — ДОПИСЫВАТЬ; нужен file_appender, который переоткрывает свой
+         *                часовой файл после рестарта в том же часу. */
         enum mode {
-            out, binary
+            out = 0, binary = 1, append = 2
         };
 
         ofstream();
@@ -21,6 +30,11 @@ namespace fc {
 
         void open(const fc::path &file, int m = binary);
         bool is_open() const;
+
+        /* Состояние потока и его сброс — для тех, кому молчание смерти подобно (логгер: строка,
+         * не попавшая в файл из-за полного диска, обязана быть замечена, а не проглочена badbit). */
+        bool good() const;
+        void clear();
 
         size_t writesome(const char *buf, size_t len);
 

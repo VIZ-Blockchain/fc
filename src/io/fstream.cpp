@@ -29,11 +29,20 @@ namespace fc {
 
    void ofstream::open( const fc::path& file, int m ) {
      const boost::filesystem::path& bfp = file;
-     /* Режим передаём КАК ЕСТЬ: раньше он игнорировался (всегда std::ios::binary, а для
-      * ofstream это «out» без «app») — поэтому повторное открытие существующего файла
-      * ОБРЕЗАЛО его, даже когда вызывающий просил app. Жертва — file_appender: ротация при
-      * рестарте в том же часу стирала уже записанные строки этого часа. */
-     my->ofs.open( bfp, (std::ios_base::openmode)m );
+     /* m — это fc::ofstream::mode, а НЕ std::ios_base::openmode. Числа у них совпадают
+      * СЛУЧАЙНО (std::ios_base::app == 1 == fc::ofstream::binary), поэтому приведение
+      * «как есть» превращало любое открытие ПО УМОЛЧАНИЮ (m = binary) в дозапись, и
+      * json::save_to_file / aes_save / mmap_struct / кошелёк дописывали второй документ
+      * в конец первого. Переводим флаги по одному; trunc ставим ЯВНО — обрезка была
+      * историческим поведением open() и остаётся поведением всех, кто не просил append. */
+     std::ios_base::openmode mode = std::ios_base::out;
+     if( m & ofstream::binary ) mode |= std::ios_base::binary;
+     if( m & ofstream::append ) mode |= std::ios_base::app;
+     else                       mode |= std::ios_base::trunc;
+     /* Сброс состояния: после неудачного открытия failbit липнет, и следующая попытка
+      * (file_appender повторяет её каждую секунду) молча «открывала» бы тот же сбой. */
+     my->ofs.clear();
+     my->ofs.open( bfp, mode );
    }
 
    /* Отдельный геттер, а не исключение в open(): на fc::ofstream пишут и другие места
@@ -41,6 +50,12 @@ namespace fc {
     * Тот, для кого молчание смерти подобно (логгер), проверяет это сам. */
    bool ofstream::is_open() const {
      return my->ofs.is_open();
+   }
+   bool ofstream::good() const {
+     return my->ofs.good();
+   }
+   void ofstream::clear() {
+     my->ofs.clear();
    }
    size_t ofstream::writesome( const char* buf, size_t len ) {
         my->ofs.write(buf,len);
