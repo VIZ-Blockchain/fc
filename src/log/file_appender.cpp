@@ -22,6 +22,9 @@ namespace fc {
          config                     cfg;
          ofstream                   out;
          boost::mutex               slock;
+         /* Потеря строк сообщается ОДИН раз на эпизод (см. log()): иначе каждая следующая строка
+          * писала бы в stderr и сама стала бы штормом вместо одной честной записи о потере. */
+         std::atomic<bool>          _log_lost{ false };
 
       private:
          /* Ротация обслуживается СВОИМ потоком (vizd, Q#3072=A). Раньше цепочка жила в очереди
@@ -34,6 +37,7 @@ namespace fc {
          time_point_sec             _current_file_start_time;
          fc::path                   _current_log_filename;   // файл, который сейчас открыт на запись
          bool                       _rotation_failed = false; // чтобы ошибка ротации не спамила каждую секунду
+         bool                       _link_failed = false;     // то же для node.log: ссылка — удобство, а не условие записи
 
          time_point_sec get_file_start_time( const time_point_sec& timestamp, const microseconds& interval )
          {
@@ -97,32 +101,75 @@ namespace fc {
                    out.flush();
                    out.close();
                }
-               remove_all(link_filename);  // on windows, you can't delete the link while the underlying file is opened for writing
                /* Открытие может НЕ удаться (диск полон, каталог отобран, путь занят каталогом).
                 * Раньше это проходило молча и аппендер замолкал до перезапуска, — поэтому при сбое
                 * возвращаем на запись ПРЕЖНИЙ файл и сообщаем наверх через исключение. */
                try
                {
-                   out.open( log_filename, std::ios_base::out | std::ios_base::app );
+                   remove_all(link_filename);  // on windows, you can't delete the link while the underlying file is opened for writing
+                   /* Режим — fc-шный (out|append), а НЕ std::ios_base: с 26.10 fstream.cpp сам
+                    * переводит fc-флаги в openmode. Прежний `std::ios_base::out | std::ios_base::app`
+                    * (= 17) работал лишь потому, что числа совпадали случайно; после перевода 17
+                    * читалось бы как «fc::ofstream::binary без append» = обрезать файл часа. */
+                   out.open( log_filename, ofstream::out | ofstream::append );
                    FC_ASSERT( out.is_open(), "cannot open log file ${f}", ("f", log_filename.preferred_string()) );
                }
                catch( ... )
                {
                    /* Возвращаем аппендер к жизни: пишем в ПРЕЖНИЙ файл и восстанавливаем на него
-                    * ссылку — иначе `tail -f node.log` останется висеть на удалённом inode. */
+                    * ссылку — иначе `tail -f node.log` останется висеть на удалённом inode.
+                    * is_open() проверяем ЯВНО: boost-поток при сбое НЕ бросает, он только выставляет
+                    * failbit, — прежний `try { ... } catch(...) {}` был декорацией, и «восстановленный»
+                    * аппендер молча оставался закрытым до перезапуска. */
                    if( !initializing && _current_file_start_time.sec_since_epoch() > 0 )
                    {
-                       try { out.open( _current_log_filename, std::ios_base::out | std::ios_base::app ); }
+                       try { out.open( _current_log_filename, ofstream::out | ofstream::append ); }
                        catch( ... ) {}
-                       try { create_hard_link( _current_log_filename, link_filename ); }
-                       catch( ... ) {}
+                       if( out.is_open() )
+                       {
+                           _log_lost.store( false );   // строки снова идут — следующий эпизод назовём заново
+                           try { create_hard_link( _current_log_filename, link_filename ); }
+                           catch( ... ) {}
+                       }
                    }
                    throw;
                }
 
-               create_hard_link(log_filename, link_filename);
+               /* Ссылка node.log — удобство для `tail -f`, а НЕ условие записи: файл выше уже открыт.
+                * Раньше её сбой бросал исключение ПОСЛЕ открытия, оставляя _current_file_start_time
+                * старым, — таймер каждую секунду закрывал и переоткрывал файл (обрыв на границе).
+                * Сообщаем один раз на эпизод и идём дальше. */
+               try
+               {
+                   create_hard_link( log_filename, link_filename );
+                   if( _link_failed )
+                   {
+                       _link_failed = false;
+                       std::cerr << "file_appender: link restored: " << link_filename.preferred_string() << "\n";
+                   }
+               }
+               catch( const fc::exception& e )
+               {
+                   if( !_link_failed )
+                   {
+                       _link_failed = true;
+                       std::cerr << "file_appender: cannot update link " << link_filename.preferred_string()
+                                 << ": " << e.to_string() << "\n";
+                   }
+               }
+               catch( ... )
+               {
+                   if( !_link_failed )
+                   {
+                       _link_failed = true;
+                       std::cerr << "file_appender: cannot update link " << link_filename.preferred_string()
+                                 << " (unknown error)\n";
+                   }
+               }
+
                _current_log_filename = log_filename;
                _current_file_start_time = start_time;
+               _log_lost.store( false );
              }
 
              /* Delete old log files */
@@ -142,7 +189,13 @@ namespace fc {
                      fc::time_point_sec current_timestamp = fc::time_point_sec::from_iso_string( current_timestamp_str );
                      if( current_timestamp < start_time )
                      {
-                         if( current_timestamp < limit_time || file_size( current_filename ) <= 0 )
+                         /* Размер берём от ПОЛНОГО пути записи, а не от голого имени: file_size("node.log.2026…")
+                          * резолвится от cwd ПРОЦЕССА (у vizd это /), а не от каталога лога — раньше это
+                          * бросало, исключение съедалось общим catch, и пустой файл жил до rotation_limit.
+                          * Каталог/ссылку на каталог не трогаем: remove_all по ним — не уборка лога. */
+                         if( !is_regular_file( *itr ) )
+                           continue;
+                         if( current_timestamp < limit_time || file_size( *itr ) <= 0 )
                          {
                              remove_all( *itr );
                              continue;
@@ -229,7 +282,9 @@ namespace fc {
 
          if(!my->cfg.rotate)
          {
-            my->out.open( my->cfg.filename, std::ios_base::out | std::ios_base::app);
+            /* fc-флаги, не std::ios_base (см. комментарий в rotate_files): 17 = binary|out после
+             * перевода режимов означало бы «обрезать node.log при каждом рестарте». */
+            my->out.open( my->cfg.filename, ofstream::out | ofstream::append );
             FC_ASSERT( my->out.is_open(), "cannot open log file ${f}", ("f", my->cfg.filename.preferred_string()) );
          }
          else
@@ -286,9 +341,28 @@ namespace fc {
 
       {
         fc::scoped_lock<boost::mutex> lock( my->slock );
+        /* Молчаливая потеря строк — тот же класс, что «аппендер замолчал»: если поток не открыт
+         * (ротация не смогла переоткрыть файл) или запись/сброс сломались (ENOSPC), `<<` только
+         * выставляет badbit — лог «жив», но пуст. Говорим ОДИН раз на эпизод. */
+        if( !my->out.is_open() )
+        {
+           if( !my->_log_lost.exchange( true ) )
+              std::cerr << "file_appender: log file is not open, messages are being LOST: "
+                        << my->cfg.filename.preferred_string() << "\n";
+           return;
+        }
         my->out << line.str() << "\t\t\t" << m.get_context().get_file() << ":" << m.get_context().get_line_number() << "\n";
         if( my->cfg.flush )
           my->out.flush();
+        if( !my->out.good() )
+        {
+           if( !my->_log_lost.exchange( true ) )
+              std::cerr << "file_appender: write to log failed, messages are being LOST: "
+                        << my->cfg.filename.preferred_string() << "\n";
+           /* Сбрасываем липкий badbit: диск могли освободить, и без этого поток остался бы
+            * «плохим» навсегда — то есть та же тихая смерть, только с другой стороны. */
+           my->out.clear();
+        }
       }
    }
 
