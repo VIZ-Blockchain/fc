@@ -23,8 +23,8 @@ namespace fc {
     //
     // Everything here is flat over the type pack: one instantiation per visitor / per lookup
     // instead of a recursive chain of N nested templates with shrinking packs. For the
-    // 111-alternative `operation` variant the recursive form cost O(N^2) instantiations in
-    // every TU that touched it, and the optimizer then had to flatten a 111-deep if-chain
+    // 107-alternative `operation` variant the recursive form cost O(N^2) instantiations in
+    // every TU that touched it, and the optimizer then had to flatten a 107-deep if-chain
     // for each visitor.
     namespace impl {
 
