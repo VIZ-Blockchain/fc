@@ -25,7 +25,7 @@ set(DEFAULT_EXECUTABLE_INSTALL_DIR bin/)
 set(CMAKE_DEBUG_POSTFIX _debug)
 set(BUILD_SHARED_LIBS NO)
 set(ECC_IMPL secp256k1 CACHE STRING "secp256k1 or openssl or mixed")
-option(BUILD_FC_TESTS "Build fc test executables" ON)
+option(BUILD_FC_TESTS "Build fc test executables" OFF)
 
 set(platformBitness 32)
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -167,13 +167,10 @@ option(UNITY_BUILD OFF)
 
 set(fc_sources
     src/uint128_t.cpp
-    src/uint128lh_t.cpp
-    src/real128.cpp
     src/variant.cpp
     src/exception.cpp
     src/variant_object.cpp
     src/thread/thread.cpp
-    src/thread/thread_specific.cpp
     src/thread/future.cpp
     src/thread/task.cpp
     src/thread/spin_lock.cpp
@@ -183,7 +180,6 @@ set(fc_sources
     src/asio.cpp
     src/string.cpp
     src/shared_ptr.cpp
-    src/stacktrace.cpp
     src/time.cpp
     src/utf8.cpp
     src/io/iostream.cpp
@@ -193,17 +189,11 @@ set(fc_sources
     src/io/sstream.cpp
     src/io/json.cpp
     src/io/varint.cpp
-    src/io/console.cpp
     src/filesystem.cpp
     src/interprocess/signals.cpp
-    src/interprocess/file_mapping.cpp
-    src/interprocess/mmap_struct.cpp
-    src/interprocess/file_mutex.cpp
     src/rpc/cli.cpp
     src/rpc/http_api.cpp
-    src/rpc/json_connection.cpp
     src/rpc/state.cpp
-    src/rpc/bstate.cpp
     src/rpc/websocket_api.cpp
     src/log/log_message.cpp
     src/log/logger.cpp
@@ -218,8 +208,6 @@ set(fc_sources
     src/crypto/aes.cpp
     src/crypto/crc.cpp
     src/crypto/city.cpp
-    src/crypto/base32.cpp
-    src/crypto/base36.cpp
     src/crypto/base58.cpp
     src/crypto/base64.cpp
     src/crypto/bigint.cpp
@@ -229,11 +217,9 @@ set(fc_sources
     src/crypto/sha256.cpp
     src/crypto/sha224.cpp
     src/crypto/sha512.cpp
-    src/crypto/blowfish.cpp
     src/crypto/elliptic_common.cpp
     ${ECC_REST}
     src/crypto/elliptic_${ECC_IMPL}.cpp
-    src/crypto/rand.cpp
     src/network/tcp_socket.cpp
     src/network/udp_socket.cpp
     src/network/http/http_connection.cpp
@@ -242,14 +228,9 @@ set(fc_sources
     src/network/http/leaky_bucket.cpp
     src/network/ntp.cpp
     src/network/ip.cpp
-    src/network/rate_limiting.cpp
     src/network/resolve.cpp
     src/network/url.cpp
-    src/network/gntp.cpp
-    src/compress/smaz.cpp
     src/compress/zlib.cpp
-    vendor/cyoencode-1.0.2/src/CyoDecode.c
-    vendor/cyoencode-1.0.2/src/CyoEncode.c
     )
 
 file(GLOB_RECURSE fc_headers ${CMAKE_CURRENT_SOURCE_DIR} *.hpp *.h)
@@ -377,7 +358,6 @@ target_include_directories(fc
                            "${readline_includes}"
 
                            PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
-                           ${CMAKE_CURRENT_SOURCE_DIR}/vendor/cyoencode-1.0.2/src
                            ${CMAKE_CURRENT_SOURCE_DIR}/vendor/secp256k1-zkp
                            )
 

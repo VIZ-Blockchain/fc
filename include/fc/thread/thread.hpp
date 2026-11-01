@@ -12,9 +12,7 @@ namespace fc {
     class microseconds;
 
     namespace detail {
-        void *get_thread_specific_data(unsigned slot);
 
-        void set_thread_specific_data(unsigned slot, void *new_value, void(*cleanup)(void *));
 
         unsigned get_next_unused_task_storage_slot();
 
@@ -151,9 +149,7 @@ namespace fc {
 
         friend class mutex;
 
-        friend void *detail::get_thread_specific_data(unsigned slot);
 
-        friend void detail::set_thread_specific_data(unsigned slot, void *new_value, void(*cleanup)(void *));
 
         friend unsigned detail::get_next_unused_task_storage_slot();
 
