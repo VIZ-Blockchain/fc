@@ -13,21 +13,79 @@
 
 #include <stdexcept>
 #include <typeinfo>
+#include <type_traits>
+#include <utility>
 #include <fc/exception/exception.hpp>
 
 namespace fc {
 
     // Implementation details, the user should not import this:
+    //
+    // Everything here is flat over the type pack: one instantiation per visitor / per lookup
+    // instead of a recursive chain of N nested templates with shrinking packs. For the
+    // 111-alternative `operation` variant the recursive form cost O(N^2) instantiations in
+    // every TU that touched it, and the optimizer then had to flatten a 111-deep if-chain
+    // for each visitor.
     namespace impl {
 
-        template<int N, typename... Ts>
-        struct storage_ops;
-
         template<typename X, typename... Ts>
-        struct position;
+        constexpr int index_of() {
+            constexpr bool same[sizeof...(Ts) + 1] = {std::is_same<X, Ts>::value..., false};
+            for (int i = 0; i < int(sizeof...(Ts)); ++i) {
+                if (same[i]) {
+                    return i;
+                }
+            }
+            return -1;
+        }
 
         template<typename... Ts>
-        struct type_info;
+        constexpr bool no_reference_types() {
+            constexpr bool is_ref[sizeof...(Ts) + 1] = {std::is_reference<Ts>::value..., false};
+            for (int i = 0; i < int(sizeof...(Ts)); ++i) {
+                if (is_ref[i]) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        template<typename... Ts>
+        constexpr bool no_duplicates() {
+            // a type is unique iff its first occurrence is its own slot
+            constexpr int first[sizeof...(Ts) + 1] = {index_of<Ts, Ts...>()..., -1};
+            for (int i = 0; i < int(sizeof...(Ts)); ++i) {
+                if (first[i] != i) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        template<typename... Ts>
+        constexpr size_t max_size() {
+            constexpr size_t sizes[sizeof...(Ts) + 1] = {sizeof(Ts)..., 0};
+            size_t m = 0;
+            for (int i = 0; i < int(sizeof...(Ts)); ++i) {
+                if (sizes[i] > m) {
+                    m = sizes[i];
+                }
+            }
+            return m;
+        }
+
+        template<typename X, typename... Ts>
+        struct position {
+            static const int pos = index_of<X, Ts...>();
+        };
+
+        template<typename... Ts>
+        struct type_info {
+            static const bool no_reference_types = impl::no_reference_types<Ts...>();
+            static const bool no_duplicates = impl::no_duplicates<Ts...>();
+            static const size_t size = max_size<Ts...>();
+            static const size_t count = sizeof...(Ts);
+        };
 
         template<typename StaticVariant>
         struct copy_construct {
@@ -56,6 +114,9 @@ namespace fc {
                 sv.init(std::move(v));
             }
         };
+
+        template<int N, typename... Ts>
+        struct storage_ops;
 
         template<int N, typename T, typename... Ts>
         struct storage_ops<N, T &, Ts...> {
@@ -166,45 +227,6 @@ namespace fc {
             static typename visitor::result_type apply(int n, const void *data, const visitor &v) {
                 FC_THROW_EXCEPTION(fc::assert_exception, "Internal error: static_variant tag is invalid.");
             }
-        };
-
-        template<typename X>
-        struct position<X> {
-            static const int pos = -1;
-        };
-
-        template<typename X, typename... Ts>
-        struct position<X, X, Ts...> {
-            static const int pos = 0;
-        };
-
-        template<typename X, typename T, typename... Ts>
-        struct position<X, T, Ts...> {
-            static const int pos = position<X, Ts...>::pos != -1 ? position<X, Ts...>::pos + 1 : -1;
-        };
-
-        template<typename T, typename... Ts>
-        struct type_info<T &, Ts...> {
-            static const bool no_reference_types = false;
-            static const bool no_duplicates = position<T, Ts...>::pos == -1 && type_info<Ts...>::no_duplicates;
-            static const size_t size = type_info<Ts...>::size > sizeof(T &) ? type_info<Ts...>::size : sizeof(T &);
-            static const size_t count = 1 + type_info<Ts...>::count;
-        };
-
-        template<typename T, typename... Ts>
-        struct type_info<T, Ts...> {
-            static const bool no_reference_types = type_info<Ts...>::no_reference_types;
-            static const bool no_duplicates = position<T, Ts...>::pos == -1 && type_info<Ts...>::no_duplicates;
-            static const size_t size = type_info<Ts...>::size > sizeof(T) ? type_info<Ts...>::size : sizeof(T &);
-            static const size_t count = 1 + type_info<Ts...>::count;
-        };
-
-        template<>
-        struct type_info<> {
-            static const bool no_reference_types = true;
-            static const bool no_duplicates = true;
-            static const size_t count = 0;
-            static const size_t size = 0;
         };
 
     } // namespace impl
